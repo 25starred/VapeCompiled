@@ -9,6 +9,7 @@ local playersService = cloneref(game:GetService('Players'))
 local inputService = cloneref(game:GetService('UserInputService'))
 local replicatedStorage = cloneref(game:GetService('ReplicatedStorage'))
 local collectionService = cloneref(game:GetService('CollectionService'))
+local textChatService = cloneref(game:GetService('TextChatService'))
 local runService = cloneref(game:GetService('RunService'))
 local guiService = cloneref(game:GetService('GuiService'))
 local coreGui = cloneref(game:GetService('CoreGui'))
@@ -27,6 +28,7 @@ local blocks = {}
 local BlockTimes = {}
 local AnticheatBypass
 local bypassRoot
+local isAttacking
 
 local function applySpeed(speed, dt)
 	local root = entitylib.character.RootPart
@@ -87,6 +89,21 @@ local function collection(tags, module, customadd, customremove)
 		module:Clean(cleanFunc)
 	end
 	return objs, cleanFunc
+end
+
+local function getInventory()
+	local inv = {}
+	local backpack = lplr:FindFirstChildWhichIsA('Backpack')
+	if backpack then
+		inv = backpack:GetChildren()
+	end
+
+	local equipped = lplr.Character and lplr.Character:FindFirstChildWhichIsA('Tool')
+	if equipped then
+		table.insert(inv, equipped)
+	end
+
+	return inv
 end
 
 local function getTool()
@@ -202,7 +219,7 @@ run(function()
 				bypassRoot = Instance.new('Part')
 				bypassRoot.CanCollide = false
 				bypassRoot.CanQuery = false
-				bypassRoot.Size = Vector3.new(2, 2, 2)
+				bypassRoot.Size = Vector3.new(2, 2, 1)
 				bypassRoot.Material = Enum.Material.SmoothPlastic
 				bypassRoot.Transparency = 1
 				bypassRoot.Parent = workspace.CurrentCamera
@@ -241,8 +258,8 @@ run(function()
 						united = united == united and diff.Magnitude > 0.1 and united * entitylib.character.Humanoid.WalkSpeed or Vector3.zero
 						bypassRoot.AssemblyLinearVelocity = Vector3.new(united.X, 0, united.Z)
 						bypassRoot.CFrame = CFrame.lookAlong(Vector3.new(bypassRoot.Position.X, root.Position.Y, bypassRoot.Position.Z), root.CFrame.LookVector)
-						if diff.Magnitude > 6 and (os.clock() - tpTimer) > 0.85 then
-							bypassRoot.CFrame += clampVec(diff, entitylib.character.Humanoid.WalkSpeed * 0.75)
+						if diff.Magnitude > 6 and (os.clock() - tpTimer) > 0.75 then
+							bypassRoot.CFrame += clampVec(diff, entitylib.character.Humanoid.WalkSpeed)
 							tpTimer = os.clock()
 						end
 	
@@ -342,8 +359,8 @@ run(function()
 	Value = Fly:CreateSlider({
 		Name = 'Speed',
 		Min = 1,
-		Max = 30,
-		Default = 30,
+		Max = 38,
+		Default = 38,
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
@@ -353,13 +370,11 @@ end)
 run(function()
 	local Killaura
 	local Targets
-	local CPS
 	local SwingRange
 	local AttackRange
 	local AngleSlider
 	local Max
 	local Mouse
-	local Lunge
 	local BoxSwingColor
 	local BoxAttackColor
 	local ParticleTexture
@@ -367,16 +382,23 @@ run(function()
 	local ParticleColor2
 	local ParticleSize
 	local Face
-	local Overlay = OverlapParams.new()
-	Overlay.FilterType = Enum.RaycastFilterType.Include
 	local Particles, Boxes, AttackDelay = {}, {}, {}
+	
+	local function getSword()
+		local inv = getInventory()
+		for _, tool in inv do
+			if tool:GetAttribute('WeaponType') then
+				return tool
+			end
+		end
+	end
 	
 	local function getAttackData()
 		if Mouse.Enabled then
 			if not inputService:IsMouseButtonPressed(0) then return false end
 		end
 	
-		local tool = getTool()
+		local tool = getSword()
 		return tool or nil, tool
 	end
 	
@@ -385,10 +407,11 @@ run(function()
 		Function = function(callback)
 			if callback then
 				repeat
+					isAttacking = false
 					local tool = getAttackData()
 					local attacked = {}
 	
-					if tool and tool:GetAttribute('WeaponType') then
+					if tool then
 						local plrs = entitylib.AllPosition({
 							Range = AttackRange.Value,
 							Wallcheck = Targets.Walls.Enabled or nil,
@@ -400,8 +423,13 @@ run(function()
 						})
 	
 						if #plrs > 0 then
+							isAttacking = true
 							local selfpos = entitylib.character.RootPart.Position
 							local localfacing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
+	
+							if tool.Parent ~= lplr.Character then
+								entitylib.character.Humanoid:EquipTool(tool)
+							end
 	
 							for _, v in plrs do
 								local delta = (v.RootPart.Position - selfpos)
@@ -418,7 +446,7 @@ run(function()
 									continue
 								end
 	
-								if (os.clock() - (AttackDelay[v.Character] or 0) < 0.1) then
+								if (os.clock() - (AttackDelay[v.Character] or 0) < 0.03) then
 									continue
 								end
 	
@@ -450,6 +478,8 @@ run(function()
 					task.wait(0.016)
 				until not Killaura.Enabled
 			else
+				isAttacking = false
+	
 				for _, v in Boxes do
 					v.Adornee = nil
 				end
@@ -465,17 +495,10 @@ run(function()
 		Players = true,
 		NPCs = true
 	})
-	CPS = Killaura:CreateTwoSlider({
-		Name = 'Attacks per Second',
-		Min = 1,
-		Max = 20,
-		DefaultMin = 12,
-		DefaultMax = 12
-	})
 	AttackRange = Killaura:CreateSlider({
 		Name = 'Attack range',
 		Min = 1,
-		Max = 30,
+		Max = 13,
 		Default = 13,
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
@@ -494,7 +517,6 @@ run(function()
 		Default = 10
 	})
 	Mouse = Killaura:CreateToggle({Name = 'Require mouse down'})
-	Lunge = Killaura:CreateToggle({Name = 'Sword lunge only'})
 	Killaura:CreateToggle({
 		Name = 'Show target',
 		Function = function(callback)
@@ -669,8 +691,8 @@ run(function()
 	Value = Speed:CreateSlider({
 		Name = 'Speed',
 		Min = 1,
-		Max = 30,
-		Default = 30,
+		Max = 38,
+		Default = 38,
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
@@ -732,6 +754,101 @@ run(function()
 		end,
 		Tooltip = 'Automatically queue in the lobby.'
 	})
+end)
+
+run(function()
+	local AutoToxic
+	local GG
+	local Toggles, Lists, Cloned, Presets = {}, {}, {}, {}
+	
+	local function sendMessage(name, obj, default)
+		local message = default
+		if #Lists[name].ListEnabled > 0 then
+			if #Cloned[name] <= 0 then
+				Cloned[name] = table.clone(Lists[name].ListEnabled)
+			end
+	
+			local entry = Random.new():NextInteger(1, #Cloned[name])
+			message = Cloned[name][entry]
+			table.remove(Cloned[name], entry)
+		end
+	
+		if not message then return end
+	
+		message = message and message:gsub('<obj>', obj or '') or ''
+		if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+			if textChatService:CanUserChatAsync(lplr.UserId) then
+				textChatService.ChatInputBarConfiguration.TargetTextChannel:SendAsync(message)
+			else
+				textChatService.ChatInputBarConfiguration.TargetTextChannel:SendPresetAsync(Presets[message] or Presets['So close'])
+			end
+		else
+			replicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, 'All')
+		end
+	end
+	
+	AutoToxic = vape.Categories.Utility:CreateModule({
+		Name = 'AutoToxic',
+		Function = function(callback)
+			if callback then
+				AutoToxic:Clean(bw.RemoteIndex.Round_Event.OnClientEvent:Connect(function(data)
+					if type(data) == 'table' and data.id == 'final_kill' then
+						if GG.Enabled then
+							if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+								if textChatService:CanUserChatAsync(lplr.UserId) then
+									textChatService.ChatInputBarConfiguration.TargetTextChannel:SendAsync('gg')
+								else
+									textChatService.ChatInputBarConfiguration.TargetTextChannel:SendPresetAsync(Presets['Good game'])
+								end
+							else
+								replicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer('gg', 'All')
+							end
+						end
+	
+						if lplr.Team and lplr.Team.Name == data.teamId then
+							if Toggles.Win.Enabled then
+								sendMessage('Win', nil, 'yall garbage')
+							end
+						end
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Says a message after a certain action'
+	})
+	GG = AutoToxic:CreateToggle({
+		Name = 'AutoGG',
+		Default = true
+	})
+	for _, v in {'Win'} do
+		Cloned[v] = {}
+		Toggles[v] = AutoToxic:CreateToggle({
+			Name = v..' ',
+			Function = function(callback)
+				if Lists[v] then
+					Lists[v].Object.Visible = callback
+				end
+			end
+		})
+		Lists[v] = AutoToxic:CreateTextList({
+			Name = v,
+			Darker = true,
+			Visible = false,
+			Function = function()
+				table.clear(Cloned[v])
+			end
+		})
+	end
+	
+	pcall(function()
+		for _, group in textChatService:GetPresetsAsync().categoryGroups do
+			for _, category in group.categories do
+				for _, message in category.messages do
+					Presets[message.value] = message.presetId
+				end
+			end
+		end
+	end)
 end)
 
 run(function()
@@ -859,15 +976,28 @@ run(function()
 	local LimitItem
 	local customlist, parts = {}, {}
 	
-	local function attemptBreak(tab, localPosition)
+	local function getPick()
+		local inv = getInventory()
+		for _, tool in inv do
+			if tool:GetAttribute('Tier') then
+				return tool
+			end
+		end
+	end
+	
+	local function attemptBreak(tab, localPosition, tool)
 		if not tab then return end
 		for _, v in tab do
-			if ((v:IsA('Model') and v.PrimaryPart or v).Position - localPosition).Magnitude < Range.Value and (v.Name ~= 'SpawnBlock' or v:GetAttribute('TeamId') ~= (lplr.Team and lplr.Team.Name or '')) then
-				if v:IsA('Model') then
+			if (v.Position - localPosition).Magnitude < Range.Value and v:GetAttribute('BedTeamId') ~= (lplr.Team and lplr.Team.Name or '') and (v:GetAttribute('HP') or 10) > 0 then
+				if tool.Parent ~= lplr.Character then
+					entitylib.character.Humanoid:EquipTool(tool)
+				end
+	
+				if v:HasTag('BedWarsX_BedSpawn') then
 					local notCovered = false
 					for _, normal in Enum.NormalId:GetEnumItems() do
 						if normal ~= Enum.NormalId.Bottom then
-							if not blocks[v.PrimaryPart.Position // 3 + Vector3.fromNormalId(normal)] then
+							if not blocks[v.Position // 3 + Vector3.fromNormalId(normal)] then
 								notCovered = true
 								break
 							end
@@ -875,14 +1005,13 @@ run(function()
 					end
 	
 					if notCovered then
-						local box = v:FindFirstChild('Hitbox')
 						bw.RemoteIndex.Block_AttemptHit:FireServer({
 							camPos = localPosition,
-							hitPos = box:GetClosestPointOnSurface(localPosition),
-							blockInstance = box
+							hitPos = v:GetClosestPointOnSurface(localPosition),
+							blockInstance = v
 						})
 					else
-						local aboveBlock = blocks[v.PrimaryPart.Position // 3 + Vector3.new(0, 1, 0)]
+						local aboveBlock = blocks[v.Position // 3 + Vector3.new(0, 1, 0)]
 	
 						if aboveBlock then
 							bw.RemoteIndex.Block_AttemptHit:FireServer({
@@ -910,19 +1039,19 @@ run(function()
 		Name = 'Breaker',
 		Function = function(callback)
 			if callback then
-				local beds = collection('BedWarsX_Bed', Breaker)
+				local beds = collection('BedWarsX_BedSpawn', Breaker)
 				local generators = collection('BedWarsX_Resource', Breaker)
 	
 				repeat
 					task.wait(1 / UpdateRate.Value)
 					if not Breaker.Enabled then break end
 	
-					local tool = getTool()
-					if entitylib.isAlive and tool and tool:GetAttribute('Tier') then
+					local tool = getPick()
+					if entitylib.isAlive and tool and not isAttacking then
 						local localPosition = bypassRoot and bypassRoot.Position or entitylib.character.RootPart.Position
 	
-						if attemptBreak(beds, localPosition) then continue end
-						if attemptBreak(generators, localPosition) then continue end
+						if attemptBreak(beds, localPosition, tool) then continue end
+						if attemptBreak(generators, localPosition, tool) then continue end
 					end
 				until not Breaker.Enabled
 			end
@@ -952,6 +1081,61 @@ run(function()
 		Max = 120,
 		Default = 60,
 		Suffix = 'hz'
+	})
+end)
+
+run(function()
+	local FixGUIs
+	
+	FixGUIs = vape.Legit:CreateModule({
+		Name = 'FixGUIs',
+		Function = function(callback)
+			if callback then
+				local guis = {lplr.PlayerGui:FindFirstChild('Team_UpgradesV3', true), lplr.PlayerGui:FindFirstChild('ItemShopV3', true)}
+				if #guis < 2 then
+					repeat
+						guis = {lplr.PlayerGui:FindFirstChild('Team_UpgradesV3', true), lplr.PlayerGui:FindFirstChild('ItemShopV3', true)}
+						task.wait()
+					until #guis >= 2 or not FixGUIs.Enabled
+	
+					if not FixGUIs.Enabled then
+						return
+					end
+				end
+	
+				local vis = false
+				local mouse = Instance.new('ImageLabel')
+				mouse.Size = UDim2.fromOffset(20, 20)
+				mouse.Visible = false
+				mouse.Parent = vape.gui
+				FixGUIs:Clean(mouse)
+	
+				for _, gui in guis do
+					if gui then
+						for _, v in gui:QueryDescendants('TextButton') do
+							local ancestor = v:FindFirstAncestorWhichIsA('ScrollingFrame')
+							if not ancestor then
+								v.Modal = true
+							end
+						end
+	
+						vis = vis or gui.Visible
+						FixGUIs:Clean(gui:GetPropertyChangedSignal('Visible'):Connect(function()
+							vis = gui.Visible
+						end))
+					end
+				end
+	
+				FixGUIs:Clean(runService.Heartbeat:Connect(function()
+					local location = inputService:GetMouseLocation()
+					mouse.Visible = vis
+					if mouse.Visible then
+						mouse.Position = UDim2.fromOffset(location.X, location.Y)
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Fix GUI\'s in first person.'
 	})
 end)
 

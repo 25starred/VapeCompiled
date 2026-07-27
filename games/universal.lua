@@ -49,6 +49,7 @@ local groupService = cloneref(game:GetService('GroupService'))
 local textChatService = cloneref(game:GetService('TextChatService'))
 local contextService = cloneref(game:GetService('ContextActionService'))
 local coreGui = cloneref(game:GetService('CoreGui'))
+local stats = cloneref(game:GetService('Stats'))
 
 local isnetworkowner = identifyexecutor and table.find({'AWP', 'Nihon'}, ({identifyexecutor()})[1]) and isnetworkowner or function()
 	return true
@@ -536,7 +537,7 @@ run(function()
 					repeat
 						local current = getcallbackvalue(textChatService, 'OnIncomingMessage')
 
-						if old ~= current then
+						if old ~= current and current then
 							if old then
 								restorefunction(old)
 							end
@@ -1723,7 +1724,7 @@ run(function()
 		Function = function(callback)
 			if callback then
 				if Method.Value == 'Part' then
-					local debounce = tick()
+					local debounce = os.clock()
 					part = Instance.new('Part')
 					part.Size = Vector3.new(10000, 1, 10000)
 					part.Transparency = 1 - Color.Opacity
@@ -1736,9 +1737,10 @@ run(function()
 	
 					AntiFall:Clean(part)
 					AntiFall:Clean(part.Touched:Connect(function(touchedpart)
-						if touchedpart.Parent == lplr.Character and entitylib.isAlive and debounce < tick() then
+						if touchedpart.Parent == lplr.Character and entitylib.isAlive and debounce < os.clock() then
 							local root = entitylib.character.RootPart
-							debounce = tick() + 0.1
+							debounce = os.clock() + 0.1
+	
 							if Mode.Value == 'Velocity' then
 								root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 100, root.AssemblyLinearVelocity.Z)
 							elseif Mode.Value == 'Impulse' then
@@ -6978,6 +6980,7 @@ end)
 
 run(function()
 	local Wallhop
+	local Offset
 	local params = OverlapParams.new()
 	params.RespectCanCollide = true
 	local oldvec
@@ -7013,7 +7016,7 @@ run(function()
 	
 				if doHop and (os.clock() - timeout) > 0.2 then
 					set = table.pack(gameCamera.CFrame:GetComponents())
-					gameCamera.CFrame *= CFrame.Angles(0, math.rad(45), 0)
+					gameCamera.CFrame *= CFrame.Angles(0, math.rad(Offset.Value), 0)
 					timeout = os.clock()
 				end
 			end
@@ -7034,6 +7037,13 @@ run(function()
 			end
 		end,
 		Tooltip = 'Automatically rotates camera for wallhopping.'
+	})
+	Offset = Wallhop:CreateSlider({
+		Name = 'Offset',
+		Min = -45,
+		Max = 45,
+		Default = 45,
+		Suffix = 'degrees'
 	})
 end)
 
@@ -7993,7 +8003,7 @@ run(function()
 		Function = function(callback)
 			if callback then
 				repeat
-					label.Text = math.floor(tonumber(cloneref(game:GetService('Stats')):FindFirstChild('PerformanceStats').Memory:GetValue()))..' MB'
+					label.Text = math.floor(tonumber(stats.PerformanceStats.Memory:GetValue()))..' MB'
 					task.wait(1)
 				until not Memory.Enabled
 			end
@@ -8040,7 +8050,7 @@ run(function()
 		Function = function(callback)
 			if callback then
 				repeat
-					label.Text = math.floor(tonumber(cloneref(game:GetService('Stats')):FindFirstChild('PerformanceStats').Ping:GetValue()))..' ms'
+					label.Text = math.floor(tonumber(stats.PerformanceStats.Ping:GetValue()))..' ms'
 					task.wait(1)
 				until not Ping.Enabled
 			end
@@ -8085,7 +8095,7 @@ run(function()
 	local FOVValue = {}
 	local Volume
 	local alreadypicked = {}
-	local beattick = tick()
+	local beattick = os.clock()
 	local oldfov, songobj, songbpm, songtween
 	
 	local function choosesong()
@@ -8122,7 +8132,7 @@ run(function()
 		until songobj.IsLoaded or not SongBeats.Enabled
 	
 		if SongBeats.Enabled then
-			beattick = tick() + (tonumber(split[3]) or 0)
+			beattick = os.clock() + (tonumber(split[3]) or 0)
 			songbpm = 60 / (tonumber(split[2]) or 50)
 			songobj:Play()
 		end
@@ -8135,6 +8145,7 @@ run(function()
 				songobj = Instance.new('Sound')
 				songobj.Volume = Volume.Value / 100
 				songobj.Parent = workspace
+				SongBeats:Clean(songobj)
 				oldfov = gameCamera.FieldOfView
 	
 				repeat
@@ -8142,22 +8153,23 @@ run(function()
 						choosesong()
 					end
 	
-					if beattick < tick() and SongBeats.Enabled and FOV.Enabled then
-						beattick = tick() + songbpm
+					if beattick < os.clock() and SongBeats.Enabled and FOV.Enabled then
+						beattick = os.clock() + songbpm
+						if songtween then
+							songtween:Cancel()
+						end
+	
 						gameCamera.FieldOfView = oldfov - FOVValue.Value
 						songtween = tweenService:Create(gameCamera, TweenInfo.new(math.min(songbpm, 0.2), Enum.EasingStyle.Linear), {
 							FieldOfView = oldfov
 						})
+	
 						songtween:Play()
 					end
 	
 					task.wait()
 				until not SongBeats.Enabled
 			else
-				if songobj then
-					songobj:Destroy()
-				end
-	
 				if songtween then
 					songtween:Cancel()
 				end
@@ -8283,7 +8295,7 @@ run(function()
 		Max = 24,
 		Default = 12,
 		Function = function(val)
-			if TimeChanger.Enabled then 
+			if TimeChanger.Enabled then
 				lightingService.TimeOfDay = val..':00:00'
 			end
 		end

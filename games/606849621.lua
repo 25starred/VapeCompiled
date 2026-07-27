@@ -302,7 +302,7 @@ run(function()
 
 		if InfNitro.Enabled and rem == 'UseNitro' then return end
 		if LazerGodmode.Enabled and rem == 'SelfDamage' then return end
-		if rem ~= 'LookAngle' and rem ~= 'AimPosition' then
+		if rem ~= 'LookAngle' and rem ~= 'AimPosition' and shared.VapeDeveloper then
 			local called = getfenv(3)
 			called = called and called.script
 			if called and (not rem) then print(id, 'called with', called:GetFullName()) end
@@ -321,6 +321,7 @@ run(function()
 			notif('Vape', 'Failed to find remote ('..id..')', 10, 'alert')
 			return
 		end
+
 		return hook(remotetable, remotes[id], ...)
 	end
 
@@ -547,6 +548,7 @@ end)
 
 run(function()
 	local AutoArrest
+	local cooldown = 0
 	
 	AutoArrest = vape.Categories.Blatant:CreateModule({
 		Name = 'AutoArrest',
@@ -563,14 +565,13 @@ run(function()
 						})
 	
 						for _, ent in plrs do
-							if not AutoArrest.Enabled then break end
 							if ent.Player and isIllegal(ent) then
 								local vehicle = ent.Humanoid.Sit and getVehicle(ent) or nil
 								if vehicle then
 									jb:FireServer('Eject', vehicle)
-								elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < 18.4 then
+								elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < 18.4 and cooldown < os.clock() then
 									jb:FireServer('Arrest', ent.Player.Name)
-									task.wait(0.6)
+									cooldown = os.clock() + 0.5
 								end
 							end
 						end
@@ -588,6 +589,7 @@ run(function()
 	local AutoPop
 	local Range
 	local TeamCheck
+	local delays = {}
 	
 	local function getEntitiesInVehicle(car)
 		local entities = {}
@@ -645,15 +647,24 @@ run(function()
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item and item.BulletEmitter and item.Model then
 							for _, car in getVehiclesNear() do
-								if not (AutoPop.Enabled and item.Model) then break end
+								if (car:GetAttribute('VehicleTireHealth') or 10) <= 0 then
+									continue
+								end
+	
+								if (delays[car] or 0) > os.clock() then
+									continue
+								end
+	
+								delays[car] = os.clock() + 0.1
 								jb:FireServer('PopTires', car, item.Model.Name)
-								task.wait(0.1)
 							end
 						end
 	
 						task.wait(0.016)
 					until not AutoPop.Enabled
 				end)
+			else
+				table.clear(delays)
 			end
 		end,
 		Tooltip = 'Automatically pops vehicles tires around you'
@@ -690,6 +701,7 @@ end)
 run(function()
 	local AutoTaze
 	local HandCheck
+	local cooldown = 0
 	
 	AutoTaze = vape.Categories.Blatant:CreateModule({
 		Name = 'AutoTaze',
@@ -705,12 +717,13 @@ run(function()
 							Range = 50
 						})
 	
-						if ent and isIllegal(ent) and not isArrested(ent.Player.Name) then
+						if ent and isIllegal(ent) and not isArrested(ent.Player.Name) and cooldown < os.clock() then
 							if item then
 								jb:FireServer('TaseReplicate', ent.Head.Position)
 							end
+	
 							jb:FireServer('Tase', ent.Humanoid, ent.Head, ent.Head.Position)
-							task.wait(10)
+							cooldown = os.clock() + 10
 						end
 					end
 	
